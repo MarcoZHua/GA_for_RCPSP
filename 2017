@@ -1,0 +1,770 @@
+import numpy as np
+import random
+import re
+import time
+
+
+
+filename=r'E:\网络计划技术\论文文献\examplefor2017\2017_2'
+f=open(filename)
+ActNo=39
+ResCapacity=[12]
+Due=202
+goal=190
+'''
+
+
+
+filename=r'E:\网络计划技术\论文\examplefor2017\2017-1'
+f=open(filename)
+ActNo=22
+ResCapacity=[9]
+Due=46
+goal=42
+'''
+
+
+
+
+ActRelationship=np.zeros(shape=(ActNo,ActNo),dtype=int)
+anum=0
+bnum=0
+cnum=0
+for i in range(0,ActNo):
+    line=f.readline()
+    my_list=re.findall(r'\s+[0-9]+',line)
+    for j in range(0,len(my_list)):
+        my_list[j]=int(my_list[j].strip())
+    xi=my_list[0]+1
+    ActMode=my_list[1]
+    SucNo=my_list[2]
+    if SucNo==1:
+        Suc1=my_list[3]+1
+        Suc2=0
+        Suc3=0
+        ActRelationship[i][Suc1-1]=1
+    elif SucNo==2:
+        Suc1=my_list[3]+1
+        Suc2=my_list[4]+1
+        Suc3=0
+        ActRelationship[i][Suc1-1]=1
+        ActRelationship[i][Suc2-1]=1
+    elif SucNo==3:
+        Suc1=my_list[3]+1
+        Suc2=my_list[4]+1
+        Suc3=my_list[5]+1
+        ActRelationship[i][Suc1-1]=1
+        ActRelationship[i][Suc2-1]=1
+        ActRelationship[i][Suc3-1]=1
+#各活动的初始关系完成
+
+#将每个活动的紧前活动和紧后活动用数组的形式存储 开始
+Ipredecessor=[]
+Isuccessor=[]
+
+for i in range(ActNo):
+    #换为列表推导式
+    pre=[j for j in range(i) if ActRelationship[j][i]==1]
+    Ipredecessor.append(pre)
+for i in range(ActNo):
+    #换为列表推导式
+    suc=[j for j in range(i,ActNo) if ActRelationship[i][j]==1]
+    Isuccessor.append(suc)
+#将每个活动的紧前活动和紧后活动用数组的形式存储 结束
+
+
+#计算各个活动的前后序活动（不包括紧前紧后活动）用ActRelationship[i][j]=2表示活动j是活动i的后序活动
+#开始
+for i in range(ActNo):
+    for xi in range(i+1,ActNo):
+        for j in range(xi+1,ActNo):
+            if ActRelationship[i][xi]>0 and ActRelationship[xi][j]>0:
+                ActRelationship[i][j]=2
+predecessor_activity=[]
+successor_activity=[]
+for i in range(ActNo):
+    #换为列表推导式
+    pre_act=[j for j in range(i) if ActRelationship[j][i]==2]
+    predecessor_activity.append(pre_act)
+for i in range(ActNo):
+    #换为列表推导式
+    suc_act=[j for j in range(i,ActNo) if ActRelationship[i][j]==2]
+    successor_activity.append(suc_act)
+#结束
+P_set=[(predecessor_activity[i]+Ipredecessor[i]) for i in range(ActNo)]
+S_set=[(successor_activity[i]+Isuccessor[i]) for i in range(ActNo)]
+
+
+
+ActD=[]
+ActR=np.zeros(shape=(ActNo,1),dtype=int)
+for i in range(ActNo):
+    line=f.readline()
+    my_list=re.findall(r'\s+[0-9]+',line)
+    for j in range(0,len(my_list)):
+        my_list[j]=int(my_list[j].strip())
+    ActD.append(my_list[2])
+    ActR[i]=my_list[3]
+
+
+
+def CPM(duedate_para):
+    #设置初始活动时间参数
+    # (CPM法，得出ES:最早开始时间 EF:最早完成时间 )
+    ES_para=np.zeros(ActNo,dtype=int)
+    EF_para=np.zeros(ActNo,dtype=int)
+    ES_para[0]=0
+    EF_para[0]=ES_para[0]+ActD[0]
+    for i in range(ActNo):
+        tempTime=0
+        for xi in  range(i):
+            if ActRelationship[xi][i]==1:
+                if EF_para[xi]>tempTime:
+                    tempTime=EF_para[xi]
+        ES_para[i]=tempTime
+        EF_para[i]=ES_para[i]+ActD[i]
+    #print(ES)
+    #print(EF)
+
+    # (CPM法，得出LS:最晚开始时间 LF:最晚完成时间 )
+    LS_para=np.zeros(ActNo,dtype=int)
+    LF_para=np.zeros(ActNo,dtype=int)
+    LF_para[ActNo-1]=duedate_para
+    LS_para[ActNo-1]=LF_para[ActNo-1]-ActD[ActNo-1]
+    for i in range(ActNo-1,-1,-1):
+        tempTime=duedate_para     #注意：DueDate将会改变
+        for xi in range(i+1,ActNo):
+            if ActRelationship[i][xi]==1:
+                if LS_para[xi]<tempTime:
+                    tempTime=LS_para[xi]
+        LF_para[i]=tempTime
+        LS_para[i]=LF_para[i]-ActD[i]
+    #print(LS)
+    #print(LF)
+    #用CPM求解完毕
+    return EF_para,LF_para
+
+def SSS(EF_para1,LF_para1,flag_possibility=0):
+    global anum
+    global bnum
+    global cnum
+    ResourceCapacity=np.zeros((LF_para1[ActNo-1],1),dtype=int)
+    for row in range(LF_para1[ActNo-1]):
+        for col in range(1):
+            ResourceCapacity[row][col]=ResCapacity[col]  #初始化资源总量
+    NewST=np.zeros(ActNo,dtype=int)
+    NewFT=np.zeros(ActNo,dtype=int)
+    NewEFT=np.zeros(ActNo,dtype=int)
+    NewST[0]=0
+    NewFT[0]=NewST[0]+ActD[0]
+    ProjectSchedule=[0]
+    try:
+        while len(ProjectSchedule)<ActNo:
+            #计算Dn
+            DecisionSet=[]
+            for i in range(1,ActNo):
+                #判断紧前活动是否已经在未完成计划表ProjectSchedule中
+                finish_act=0
+                for each in Ipredecessor[i]:
+                    if each in ProjectSchedule:
+                        finish_act+=1
+                if finish_act==len(Ipredecessor[i]):
+                    PredecessorBelongsToProjectSchedule=1
+                else:
+                    PredecessorBelongsToProjectSchedule=0
+                #PredecessorBelongsToProjectSchedule=[True for each in Ipredecessor[i] if each in ProjectSchedule]
+                if PredecessorBelongsToProjectSchedule and (i not in ProjectSchedule):
+                    DecisionSet.append(i)
+            #print("现阶段的可选择集合为：")
+            #print(DecisionSet)
+            #计算Dn完毕
+
+            #计算剩余资源量
+            ResourceConsume=np.zeros((LF_para1[ActNo-1],1),dtype=int)
+            for EachActivity in ProjectSchedule:
+                for Time in range(int(NewFT[EachActivity])-ActD[EachActivity],int(NewFT[EachActivity])):
+                    for ResourceType in range(1):
+                        ResourceConsume[Time][ResourceType]+=ActR[EachActivity][ResourceType]
+            ResidueResource=ResourceCapacity-ResourceConsume
+
+            if np.min(ResidueResource)<0:
+                #print("*")
+                raise Exception("剩余资源不够了")
+            #else:
+            #    print("调度成功")
+
+            #计算剩余资源量完成
+
+            #开始选择决策集合DecisionSet中的活动作为下一步调度的目标
+            #ActWaitingSchedule为下一步调度活动的序号
+            PriorityValue=[]
+            for EachActivity in DecisionSet:
+                PriorityValue.append(LF_para1[EachActivity]-ActD[EachActivity])    #LST最小最晚开始时间优先规则
+
+
+            if flag_possibility==1:
+                #按概率选择下一步活动 开始
+                InfValueMAX=max(PriorityValue)
+                rou=np.zeros(len(PriorityValue))
+                for act in range(len(DecisionSet)):
+                    rou[act]=InfValueMAX-PriorityValue[act]
+                pusai=np.zeros(len(PriorityValue))
+                for act in range(len(DecisionSet)):
+                    pusai[act]=(rou[act]+1)/(rou.sum()+len(PriorityValue))
+                rdm=random.random()
+                lb=0
+                for k in range (len(PriorityValue)):
+                    if rdm<lb+pusai[k]:
+                        ActWaitingSchedule=DecisionSet[k]
+                        break
+                    else:
+                        lb+=pusai[k]
+            #按概率选择下一步活动 完成  ActWaitingSchedule为采样最终结果
+
+            else:
+                InfValue=min(PriorityValue)
+                for ActivityNumber in range(len(DecisionSet)):
+                    if PriorityValue[ActivityNumber]==InfValue:
+                        ActWaitingSchedule=DecisionSet[ActivityNumber]
+                        break #保证不同活动优先值相同时，选择序号较小的活动进行调度
+                #选择决策集合DecisionSet中的一个活动作为下一步调度的活动 完成，活动序号为 ActWaitingSchedule
+                #ActWaitingSchedule=random.choice(DecisionSet)
+
+
+            #计算该活动的最早完成时间 开始
+            #print("下一步所选择的活动为%d"%ActWaitingSchedule)
+            FinishiTimeSet=[]
+            for EachActivity in Ipredecessor[ActWaitingSchedule]:
+                FinishiTimeSet.append(NewFT[EachActivity])
+            NewEFT[ActWaitingSchedule]=max(FinishiTimeSet)+ActD[ActWaitingSchedule]
+
+            #计算该活动的最早开始时间 完成
+
+            #计算该活动的完成时间  开始
+            Time=int(NewEFT[ActWaitingSchedule])
+            while Time<=LF_para1[ActWaitingSchedule]:
+                temp=Time
+                count=0
+                for Duration in range(temp-int(ActD[ActWaitingSchedule]),temp):
+                    for ResourceType in range(1):
+                        if ActR[ActWaitingSchedule][ResourceType]<=ResidueResource[Duration][ResourceType]:
+                            count+=1
+                if count==1*ActD[ActWaitingSchedule]:
+                    break
+                else:
+                    Time+=1
+            NewFT[ActWaitingSchedule]=Time
+            #if NewFT[ActWaitingSchedule]>LF_para1[ActWaitingSchedule]:
+            #   print("生成错误时间表，不用再进行双向矫正了，重新开始串行调度！！")
+            #计算该活动的完成时间 结束 完成时间为Time
+
+
+            #将该活动加入到已调度集合Sn中
+            ProjectSchedule.append(ActWaitingSchedule)
+            #print(ProjectSchedule)
+            #print(ActWaitingSchedule+1,NewFT[ActWaitingSchedule]-ActD[ActWaitingSchedule],NewFT[ActWaitingSchedule])
+            #print(NewFT[ActWaitingSchedule])
+            #加入完毕
+        #print("启发式算法求得的结果为")
+        #print(NewFT)
+        #for i in ProjectSchedule:
+        #   print("活动序号为",i+1,end=',')
+        #print('\n')
+
+
+        #double justification
+        #已知NewFT[ActWaitingSchedule]
+
+        #right justification 开始
+        NNewFT=np.zeros(ActNo,dtype=int)
+        for i in range(ActNo):
+            NNewFT[i]=NewFT[i]
+        UL=np.argsort(-NNewFT)
+        OL=[ActNo-1]
+        #print("UL为")
+        #print(UL)
+        for lastactivity in range(ActNo-2): #该循环范围可在活动总数内任意设置
+            if UL[lastactivity]==ActNo-1:
+                UL=np.delete(UL,lastactivity)     #目的是为了将UL集合中的终止虚活动删除
+        #UL=np.delete(UL,0)
+        #print("更新后UL")
+        #print(UL)
+        JustR_FT=np.zeros(ActNo,dtype=int)
+        JustR_ST=np.zeros(ActNo,dtype=int)
+        JustR_FT[ActNo-1]=NNewFT[ActNo-1]
+        JustR_ST[ActNo-1]=NNewFT[ActNo-1]-ActD[ActNo-1]
+        JustR_ResourceCapacity=np.zeros((LF_para1[ActNo-1],1),dtype=int)
+        for row in range(LF_para1[ActNo-1]):
+            for col in range(1):
+                JustR_ResourceCapacity[row][col]=ResCapacity[col]
+        while np.size(UL)>0:
+            StartTime=[]
+            for eachactivity in Isuccessor[UL[0]]:
+                StartTime.append(JustR_FT[eachactivity]-ActD[eachactivity])
+            NewLatestFT=min(StartTime)
+            JustR_ResourceConsume=np.zeros((LF_para1[ActNo-1],1),dtype=int)
+            for eachactivity in OL:
+                for Time in range(int(JustR_FT[eachactivity])-ActD[eachactivity],int(JustR_FT[eachactivity])):
+                    for JustR_ResourceType in range(1):
+                       JustR_ResourceConsume[Time][JustR_ResourceType]+=ActR[eachactivity][JustR_ResourceType]
+            JustR_ResidueResource=JustR_ResourceCapacity-JustR_ResourceConsume
+            if np.min(JustR_ResidueResource)<0:
+                print("右向调度资源不够了")
+                raise Exception("右向调度资源不够了")
+            JustR_Time=int(NewLatestFT) #紧后活动最小开始时间
+            while JustR_Time>NNewFT[UL[0]]:
+                JustR_temp=JustR_Time
+                JustR_count=0
+                for JustR_Duration in range(JustR_temp-ActD[UL[0]],JustR_temp):
+                    for JustR_ResourceType in range(1):
+                        if ActR[UL[0]][JustR_ResourceType]<=JustR_ResidueResource[JustR_Duration][JustR_ResourceType]:
+                            JustR_count+=1
+                if JustR_count==1*ActD[UL[0]]:
+                    break
+                else :
+                    JustR_Time-=1
+            JustR_FT[UL[0]]=JustR_Time
+            JustR_ST[UL[0]]=JustR_FT[UL[0]]-ActD[UL[0]]
+            #print(UL[0]+1,JustR_FT[UL[0]])
+            OL.append(UL[0])
+            UL=np.delete(UL,0)
+        #生成右向调整后的开始结束时间表
+        JustR_FT=JustR_FT-JustR_ST[0]
+        JustR_ST=JustR_FT-ActD
+        #print(JustR_FT)
+        #print(JustR_ST)
+        #print('~'*100)
+        #right justification 完成
+
+        #left justification  开始
+        UL0=np.argsort(JustR_ST)
+        OL0=[0]
+        for firstactivity in range(ActNo-2): #该循环范围可在活动总数内任意设置
+            if UL0[firstactivity]==0:
+                UL0=np.delete(UL0,firstactivity)
+        #UL0=np.delete(UL0,0)
+        JustL_FT=np.zeros(ActNo,dtype=int)
+        JustL_ST=np.zeros(ActNo,dtype=int)
+        JustL_ST[0]=JustR_ST[0]
+        JustL_FT[0]=JustL_ST[0]+ActD[0]
+        JustL_ResourceCapacity=np.zeros((LF_para1[ActNo-1],1),dtype=int)
+        for row in range(LF_para1[ActNo-1]):
+            for col in range(1):
+                JustL_ResourceCapacity[row][col]=ResCapacity[col]
+        while np.size(UL0)>0:
+            FinishTime=[]
+            for eachactivity in Ipredecessor[UL0[0]]:
+                FinishTime.append(JustL_ST[eachactivity]+ActD[eachactivity])
+            NewEarliestST=max(FinishTime)
+            JustL_ResourceConsume=np.zeros((LF_para1[ActNo-1],1),dtype=int)
+            for eachactivity in OL0:
+               for Time in range(int(JustL_ST[eachactivity]),int(JustL_ST[eachactivity])+ActD[eachactivity]):
+                   for JustL_ResourceType in range(1):
+                       JustL_ResourceConsume[Time][JustL_ResourceType]+=ActR[eachactivity][JustL_ResourceType]
+            JustL_ResidueResource=JustL_ResourceCapacity-JustL_ResourceConsume
+            if np.min(JustL_ResidueResource)<0:
+                print("左向调度资源不够了")
+                raise Exception("左向调度资源不够了")
+            JustL_Time=int(NewEarliestST)   #紧前活动的最大完成时间
+            while JustL_Time<=JustR_ST[UL0[0]]:
+                JustL_temp=JustL_Time
+                JustL_count=0
+                for JustL_Duration in range(JustL_temp,JustL_temp+ActD[UL0[0]]):
+                    for JustL_ResourceType in range(1):
+                        #try:
+                        if ActR[UL0[0]][JustL_ResourceType]<=JustL_ResidueResource[JustL_Duration][JustL_ResourceType]:
+                            JustL_count+=1
+                        #except IndexError:
+                            #print("索引错误")
+                            #print(ActR.shape)
+                            #print(JustL_ResidueResource.shape)
+                if JustL_count==1*ActD[UL0[0]]:
+                    break
+                else :
+                    JustL_Time+=1
+            JustL_ST[UL0[0]]=JustL_Time
+            JustL_FT[UL0[0]]=JustL_ST[UL0[0]]+ActD[UL0[0]]
+            OL0.append(UL0[0])
+            UL0=np.delete(UL0,0)
+        #print(UL0)
+        #print('~'*50)
+        #生成左向调整后的开始结束时间表
+        #print(JustR_ST[0])
+        JustL_FT=JustL_FT-JustL_ST[0]
+        JustL_ST=JustL_FT-ActD
+        #print(JustL_FT)
+        #print(JustL_ST)
+        #left justification  结束
+        '''
+        if JustL_FT[ActNo-1]<=goal:
+            if JustL_ST[18]==64:
+                #print("正常调度开始时间",NewST)
+                #print("正常调度完成时间",NewFT)
+                #print("右向调度开始时间",JustR_ST)
+                #print("右向调度完成时间",JustR_FT)
+                #print("左向调度开始时间",JustL_ST)
+                #print("左向调度完成时间",JustL_FT)
+                JustL_FT[ActNo-1]=202
+
+            else:
+                print(JustL_ST)
+                print(JustL_FT)
+                print("*"*100)
+        '''
+
+
+
+
+        anum+=1
+        
+
+
+        #bnum=bnum+1
+        return JustL_FT[ActNo-1]
+    except:
+        cnum+=1
+        #如果在串行调度中由于概率选择原因，未能生成正确的时间表，则返回第一次按启发式算法执行的串行调度的结果，即初始解
+        #print("该结果为初始调度结果！！！")
+        return makespan_ini
+
+def decomposition (EF_para,LF_para):
+    subwindows=np.zeros(shape=(0,ActNo),dtype=int)
+    for i in range(population_size//2):   #15表示将生成15*2=30个子时间窗 未来将会产生个体数为30的种群
+        #时间窗分解开始
+        #左侧子可行解空间做逆向更新
+        SelectActivity=random.randint(0,ActNo-2)
+        #SelectActivity=5
+        #print("选择分解的活动为%d"%SelectActivity)
+        LF_left=np.zeros(ActNo,dtype=int)
+        LS_left=np.zeros(ActNo,dtype=int)
+        PI0=(LF_para[SelectActivity]+EF_para[SelectActivity])//2
+        for i in range(ActNo):
+            LF_left[i]=LF_para[i]
+        LF_left[SelectActivity]=PI0
+        for i in range(ActNo):
+            LS_left[i]=LF_left[i]-ActD[i]
+        for j in range(SelectActivity-1,-1,-1):
+            if (j in predecessor_activity[SelectActivity]) or (j in Ipredecessor[SelectActivity]):
+                LF_left[j]=min(LS_left[i] for i in Isuccessor[j])
+                LS_left[j]=LF_left[j]-ActD[j]
+        #右侧子可行解空间做正向更新
+        EF_right=np.zeros(ActNo,dtype=int)
+        ES_right=np.zeros(ActNo,dtype=int)
+        PI1=PI0+1
+        for i in range(ActNo):
+            EF_right[i]=EF_para[i]
+        EF_right[SelectActivity]=PI1
+        for i in range(ActNo):
+            ES_right[i]=EF_right[i]-ActD[i]
+        for j in range(SelectActivity+1,ActNo):
+            if (j in successor_activity[SelectActivity]) or (j in Isuccessor[SelectActivity]):
+                ES_right[j]=max(EF_right[i] for i in Ipredecessor[j])
+                EF_right[j]=ES_right[j]+ActD[j]
+        #确定左子空间
+        ES_left=np.zeros(ActNo,dtype=int)
+        EF_left=np.zeros(ActNo,dtype=int)
+        for i in range(ActNo):
+            EF_left[i]=EF_para[i]
+            ES_left[i]=EF_left[i]-ActD[i]
+        #LS_left
+        #LF_left
+
+        #确定右子空间
+        #ES_right
+        #EF_right
+        LS_right=np.zeros(ActNo,dtype=int)
+        LF_right=np.zeros(ActNo,dtype=int)
+        for i in range(ActNo):
+            LF_right[i]=LF_para[i]
+            LS_right[i]=LF_right[i]-ActD[i]
+        subwindows=np.vstack([subwindows,EF_left,LF_left,EF_right,LF_right])
+        #np.savetxt('E:\网络计划技术\RcpspCode_Unfinished\initial_pop.txt',(EF_left,LF_left,EF_right,LF_right),fmt="%d")
+    return subwindows
+
+#交叉算子
+def cross(population_para_1,pc):
+    population_cross_p  =population_para_1.copy()
+    population_cross    =population_para_1.copy()
+    OperateNum=[]
+    for i in range(population_size//2):
+        if random.random()<pc:
+            cross_point=random.randint(1,ActNo-2)
+            be_crossed=i+int(population_size/2)
+
+            population_cross[i][0][cross_point:]=population_cross_p[be_crossed][0][cross_point:]
+            population_cross[i][1][cross_point:]=population_cross_p[be_crossed][1][cross_point:]
+            population_cross[be_crossed][0][cross_point:]=population_cross_p[i][0][cross_point:]
+            population_cross[be_crossed][1][cross_point:]=population_cross_p[i][1][cross_point:]
+            OperateNum.append(i)
+
+    for i in range(population_size):
+        if i in OperateNum:
+            #使EF可行化
+            for gene in range(cross_point,ActNo):
+                if max(population_cross[i][0][k] for k in P_set[gene])>population_cross[i][0][gene]-ActD[gene]:
+                    population_cross[i][0][gene]=max(population_cross[i][0][k] for k in P_set[gene])+ActD[gene]
+
+            #使LF可行化
+            for gene in range(cross_point,-1,-1):
+                if min((population_cross[i][1][k]-ActD[k]) for k in S_set[gene])<population[i][1][gene]:
+                        population_cross[i][1][gene]=min((population_cross[i][1][k]-ActD[gene]) for k in S_set[gene])
+
+            #防止某一活动EF>LF
+            for gene in range(ActNo):
+                    if population_cross[i][0][gene]>population_cross[i][1][gene]:
+                        population_cross[i][1][gene]= population_cross[i][0][gene]
+
+
+
+    return population_cross
+
+
+#变异算子
+def mutation(population_para_2,pm):
+    population_mutate=population_para_2.copy()
+    for i in range(population_size):
+        if random.random()<pm:
+            mutation_point=random.randint(1,ActNo-2)
+            if int(len(P_set[mutation_point]))>0 and int(len(S_set[mutation_point])>0):
+                mutation1=max(population_mutate[i][0][j] for j in P_set[mutation_point])+ActD[mutation_point]
+                mutation2=min((population_mutate[i][1][j]-ActD[j] ) for j in S_set[mutation_point])
+                try:
+                    a=random.randint(mutation1,mutation2)
+                    b=random.randint(mutation1,mutation2)
+                    rmu1=min(a,b)
+                    rmu2=max(a,b)
+
+                    population_mutate[i][0][mutation_point]=rmu1
+                    population_mutate[i][1][mutation_point]=rmu2
+                except:
+                    population_mutate[i]=population_mutate[i]
+                    #print("变异时可能发生异常")
+                    #print(a,b,rmu1,rmu2,mutation1,mutation2)
+                    #print(mutation1,mutation2)
+                    #print(population[i])
+    return population_mutate
+
+
+#求出每个个体的适应度值
+def Fitness(population_result):
+    FitValue=np.zeros(population_size)
+    BestIndiv=min(population_result)
+    WorstIndiv=max(population_result)
+    for i in range(population_size):
+        FitValue[i]=(WorstIndiv-population_result[i]+1)/(WorstIndiv-BestIndiv+1)
+    return FitValue
+
+
+#从2倍种群中淘汰较差个体
+def Chose(result_1,result_2,pop1,pop2):
+    #从变异后种群和原种群中剔除population_size个个体以组成新种群
+    '''
+    三人锦标赛法
+    '''
+    pop=np.vstack([pop1,pop2])
+    result_total=np.append(result_1,result_2)
+    for i in range(population_size):
+        ind_1=random.randint(0,population_size*2-1-i)
+        ind_2=random.randint(0,population_size*2-1-i)
+        ind_3=random.randint(0,population_size*2-1-i)
+        ind=np.array([ind_1,ind_2,ind_3])
+        cut=np.argmax(result_total[ind])
+        #print(ind)
+        #print(result_total[ind])
+        #print(ind[cut])
+        pop=np.delete(pop,ind[cut],axis=0)
+        result_total=np.delete(result_total,ind[cut],axis=0)
+    return pop,result_total
+
+
+def ChoseParents(result):
+    '''
+    该函数可以返回进行交叉操作所需染色体在原种群中的序号（并非染色体本身）
+    parents[0][0]为第一次操作的父本序号
+    parents[0][1]为第一次操作的母本序号
+    :param result:
+    :return:
+    '''
+    parents=np.zeros(shape=(population_size//2,2),dtype=int)
+    for choseparents in range(population_size//2):
+        father1=random.randint(0,population_size-1)
+        father2=random.randint(0,population_size-1)
+        if result[father1]<result[father2]:
+            parent_1=father1
+        else:
+            parent_1=father2
+
+        mother1=random.randint(0,population_size-1)
+        mother2=random.randint(0,population_size-1)
+        if result[mother1]<result[mother2]:
+            parent_2=mother1
+        else:
+            parent_2=mother2
+        parents[choseparents][0]=parent_1
+        parents[choseparents][1]=parent_2
+
+    return parents
+
+EF,LF=CPM(Due)
+print(EF,LF)
+makespan_ini=SSS(EF,LF)
+res=np.zeros(30,dtype=int)
+print("初始调度结果为",SSS(EF,LF))
+
+
+
+'''
+temp=np.zeros(1000,dtype=int)
+for i in range(30):
+    for j in range(1000):
+        temp[j]=SSS(EF,LF,1)
+    res[i]=np.min(temp)
+    print("第{}个结果为{}".format(i,res[i]))
+print(max(res))
+print(min(res))
+print(res)
+print(np.std(res))
+print("平均值为",np.average(res))
+
+'''
+
+
+
+
+'''
+for times in range(30):
+
+    gen=32
+    DDCS1=1
+    DDCS2=1
+    population_size=30
+    Sub_Windows=decomposition (EF,LF)   #在新时间窗下进行时间窗分解
+    temp1=np.zeros(33,dtype=int)
+    temp2=np.zeros(30,dtype=int)
+    #将Sub_Windows转换成population  开始
+    #30个个体，每个个体有两条染色体，分别是EF和LF，每条染色体长度为ActNo
+    population=np.zeros(shape=(population_size,2,ActNo),dtype=int)
+    for i in range(0,population_size):
+        population[i][0]=Sub_Windows[2*i]
+        population[i][1]=Sub_Windows[2*i+1]
+    for i in range(30):
+        for j in range(33):
+            temp1[j]=SSS(population[i][0],population[i][1],1)
+        temp2[i]=np.min(temp1)
+    res[times]=np.min(temp2)
+    print("第{}个结果为{}".format(times,res[times]))
+print(max(res))
+print(min(res))
+print(res)
+print(np.std(res))
+print("平均值为",np.average(res))
+
+
+
+
+
+'''
+timeset=np.zeros(30,dtype=int)
+record=np.zeros(30)
+for times in range(30):
+
+    gen=8
+    DDCS1=1
+    DDCS2=1
+    population_size=30
+    Sub_Windows=decomposition (EF,LF)   #在新时间窗下进行时间窗分解
+
+    #将Sub_Windows转换成population  开始
+    #30个个体，每个个体有两条染色体，分别是EF和LF，每条染色体长度为ActNo
+    population=np.zeros(shape=(population_size,2,ActNo),dtype=int)
+    for i in range(0,population_size):
+        population[i][0]=Sub_Windows[2*i]
+        population[i][1]=Sub_Windows[2*i+1]
+    #print("进行时间窗分解后，得到的新时间窗为：")
+    #print(population)
+
+    result_temp=np.zeros(population_size,dtype=int)
+    result_new=np.zeros(population_size,dtype=int)
+
+
+    ini=np.zeros(DDCS1,dtype=int)
+    t3=time.time()
+    for i in range(population_size):
+        for sam in range(DDCS1):
+            ini[sam]=SSS(population[i][0],population[i][1],1)
+        result_new[i]=np.min(ini)
+    t4=time.time()-t3
+    par_ini=ChoseParents(result_new)
+    #print(result_new)
+    #print("15对父代分别为",par_ini)
+    will_cross_population=np.zeros(shape=(population_size,2,ActNo),dtype=int)
+    for i in range(population_size//2):
+        #前15个为父本 后15个为母本
+        will_cross_population[i]=population[par_ini[i][0]]
+        will_cross_population[i+population_size//2]=population[par_ini[i][1]]
+    temp_cross_population=cross(will_cross_population,0.9)
+    temp_mutate_population=mutation(temp_cross_population,0.4)
+    for i in range(population_size):
+        result_temp[i]=SSS(temp_mutate_population[i][0],temp_mutate_population[i][1],1)
+
+    pop_next,result_son=Chose(result_new,result_temp,population,temp_mutate_population)
+    #result_son=np.zeros(population_size,dtype=int)
+    #for i in range(population_size):
+    #   result_son[i]=SSS(pop_next[i][0],pop_next[i][1],1)
+    #print("原种群的求解结果为",result_new,"平均值为",np.mean(result_new))
+    #print("变异后种群结果为",result_temp,"平均值为",np.mean(result_temp))
+    #print("子代种群结果为",result_son,"平均值为",np.mean(result_son))
+
+
+
+    sample=np.zeros(DDCS2,dtype=int)
+    best_result_set=[]
+    worst_result_set=[]
+    t1=time.time()
+    for j in range(gen):
+        par_ini=ChoseParents(result_son)
+        for i in range(population_size//2):
+            will_cross_population[i]=pop_next[par_ini[i][0]]
+            will_cross_population[i+population_size//2]=pop_next[par_ini[i][1]]
+        temp_cross_population=cross(will_cross_population,0.9)
+        temp_mutate_population=mutation(temp_cross_population,0.4*(gen-j)/(gen-1))
+        for i in range(population_size):
+            for sam in range(DDCS2):
+                sample[sam]=SSS(temp_mutate_population[i][0],temp_mutate_population[i][1],1)
+            result_temp[i]=np.min(sample)
+
+
+
+        pop_next_1,result_son=Chose(result_son,result_temp,pop_next,temp_mutate_population)
+        #for i in range(population_size):
+        #   for sam in range(DDCS2):
+        #       sample[sam]=SSS(pop_next_1[i][0],pop_next_1[i][1],1)
+        #   result_son[i]=np.min(sample)
+
+        best_result_set.append(min(result_son))
+        worst_result_set.append(max(result_son))
+        #print("第{}代的结果为{}，平均值为{}".format(j,result_son,np.mean(result_son)))
+        best_result=int(min(best_result_set))
+        worst_result=int(max(worst_result_set))
+
+    t2=time.time()-t1
+    #print("总耗时为{}".format(time.time()-t1))
+    print("最后结果为{},所耗时间为{}".format(min(best_result_set),t2+t4))
+    print('+'*200)
+    record[times]=t2+t4
+    #print("最差结果为{}".format(max(worst_result_set)))
+    #print("最后一代平均结果{}".format(np.average(result_son)))
+    #print(anum,bnum,cnum)
+    timeset[times]=min(best_result_set)
+print(timeset)
+print(min(timeset))
+print(max(timeset))
+print(np.average(timeset))
+print(np.std(timeset))
+
+
+print(min(record))
+print(max(record))
+print(np.average(record))
+print(np.std(record))
+
